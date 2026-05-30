@@ -4,35 +4,27 @@ class Tile:
         self.color = 0
 
     def change_color(self):
-        if self.color == 0:
-            self.color = 1
-        elif self.color == 1:
-            self.color = 0
+        self.color = 1 - self.color
 
 class Ant:
     dirs = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-    def __init__(self, x_origin, y_origin):
+    def __init__(self, x_origin=0, y_origin=0):
         self.pos = [x_origin, y_origin]
         self.facing = 3
 
-    def square_logic(self, tiles, x_size, y_size):
-        if tiles[tuple(self.pos)].color == 0:
-            self.facing = (self.facing - 1) % 4
-        elif tiles[tuple(self.pos)].color == 1:
-            self.facing = (self.facing + 1) % 4
-        tiles[tuple(self.pos)].change_color()
-        return(self.move(x_size, y_size))
+    def square_logic(self, tiles):
+        pos = tuple(self.pos)
+        if pos not in tiles:
+            tiles[pos] = Tile(*pos)
 
-    def move(self, x_size, y_size):
+        if tiles[pos].color == 0:
+            self.facing = (self.facing - 1) % 4
+        elif tiles[pos].color == 1:
+            self.facing = (self.facing + 1) % 4
+        tiles[pos].change_color()
+        self.move()
+
+    def move(self):
         dx, dy = Ant.dirs[self.facing]
         self.pos[0] += dx
         self.pos[1] += dy
-        if self.pos[0] == 0:
-            return False
-        if self.pos[0] == x_size:
-            return False
-        if self.pos[1] == 0:
-            return False
-        if self.pos[1] == y_size:
-            return False
-        return True
