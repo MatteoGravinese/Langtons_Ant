@@ -94,6 +94,51 @@
         button:hover {
             background: #333333;
         }
+        .secondary-button {
+            background: #ffffff;
+            color: #000000;
+            border: 1px solid #000000;
+        }
+        .secondary-button:hover {
+            background: #f0f0f0;
+        }
+        .rule-row {
+            border: 1px solid #000000;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .rule-row label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .rule-row select,
+        .rule-row input[type=color] {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .rule-row select {
+            background: #f5f5f5;
+            border: 1px solid #000000;
+            border-radius: 8px;
+            padding: 9px 10px;
+            font-size: 14px;
+        }
+        .rule-row input[type=color] {
+            height: 36px;
+            border: 1px solid #000000;
+            border-radius: 8px;
+            padding: 2px;
+            background: #ffffff;
+            cursor: pointer;
+        }
+        .rule-heading {
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
         label[for=tickspeed] {
             font-size: 14px;
             color: #000000;
@@ -224,9 +269,14 @@
                     </ul>
                 </div>
                 <div class="controls">
-                    <button id="submitBtn">Start Infinite Grid</button>
+                    <h3 class="rule-heading">Rules</h3>
+                    <div id="rulesList"></div>
+                    <button id="addRuleBtn" class="secondary-button">Add Rule</button>
+                    <hr>
+                    <button id="submitBtn">Start Simulation</button>
                     <button id="centerBtn">Center View</button>
                     <hr>
+                    <button id="pauseBtn">Pause Simulation</button>
                     <label for="tickspeed">Tickspeed: <span id="tickspeed-value">500</span>ms</label>
                     <input type="range" id="tickspeed" min="0" max="1000" value="500">
                     <label class="checkbox-label" id="fastestPossibleOption" style="display: none;">
@@ -247,19 +297,28 @@
         let tileSize = 18;
         let cameraX = 0;
         let cameraY = 0;
-        let ant = { x: 0, y: 0 };
+        let ant = { x: 0, y: 0, facing: 3 };
+        const antImage = new Image();
+        antImage.src = '/assets/ant.png';
+        antImage.onload = draw;
         let isDragging = false;
         let dragStart = { x: 0, y: 0 };
         let cameraStart = { x: 0, y: 0 };
         let activeSimulationId = null;
+        let paused = false;
+        let simulationStarted = false;
+        let palette = ['#ffffff', '#000000'];
+        let rules = [
+            { color: '#ffffff', turn: 'left', nextIndex: 1 },
+            { color: '#000000', turn: 'right', nextIndex: 0 }
+        ];
         const tickspeedInput = document.getElementById('tickspeed');
         const fastestPossibleInput = document.getElementById('fastestPossible');
         const fastestPossibleOption = document.getElementById('fastestPossibleOption');
-
+        const rulesList = document.getElementById('rulesList');
         function cellKey(x, y) {
             return `${x},${y}`;
         }
-
         function resizeCanvas() {
             const dpr = window.devicePixelRatio || 1;
             canvas.width = Math.floor(container.clientWidth * dpr);
@@ -269,14 +328,12 @@
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             draw();
         }
-
         function screenToWorld(screenX, screenY) {
             return {
                 x: (screenX - canvas.clientWidth / 2) / tileSize + cameraX,
                 y: (screenY - canvas.clientHeight / 2) / tileSize + cameraY
             };
         }
-
         function syncFastestPossibleOption() {
             const isZeroSpeed = tickspeedInput.value === '0';
             fastestPossibleOption.style.display = isZeroSpeed ? 'flex' : 'none';
@@ -284,36 +341,98 @@
                 fastestPossibleInput.checked = false;
             }
         }
-
         function emitSpeedSettings() {
             socket.emit('speed_settings', {
                 tickspeed: tickspeedInput.value,
                 fastest_possible: fastestPossibleInput.checked
             })
         }
-
+        function colorName(index) {
+            return `Color ${index + 1} (${rules[index].color})`;
+        }
+        function normalizeRuleTargets() {
+            rules.forEach((rule, index) => {
+                if (rules.length <= 1) {
+                    rule.nextIndex = index;
+                    return;
+                }
+                if (rule.nextIndex === index || rule.nextIndex >= rules.length) {
+                    rule.nextIndex = (index + 1) % rules.length;
+                }
+            });
+        }
+        function renderRules() {
+            normalizeRuleTargets();
+            rulesList.innerHTML = '';
+            rules.forEach((rule, index) => {
+                const row = document.createElement('div');
+                row.className = 'rule-row';
+                row.dataset.index = index;
+                const options = rules.map((candidate, candidateIndex) => {
+                    if (rules.length > 1 && candidateIndex === index) return '';
+                    const selected = candidateIndex === rule.nextIndex ? 'selected' : '';
+                    return `<option value="${candidateIndex}" ${selected}>${colorName(candidateIndex)}</option>`;
+                }).join('');
+                row.innerHTML = `
+                    <label>Square color</label>
+                    <input type="color" class="rule-color" value="${rule.color}">
+                    <label>Ant turn</label>
+                    <select class="rule-turn">
+                        <option value="right" ${rule.turn === 'right' ? 'selected' : ''}>Right 90</option>
+                        <option value="left" ${rule.turn === 'left' ? 'selected' : ''}>Left 90</option>
+                        <option value="back" ${rule.turn === 'back' ? 'selected' : ''}>Rotate 180</option>
+                    </select>
+                    <label>Change square to</label>
+                    <select class="rule-next">${options}</select>
+                    <button class="delete-rule secondary-button" type="button">Delete Rule</button>
+                `;
+                rulesList.appendChild(row);
+            });
+            draw();
+        }
+        function buildRulesPayload() {
+            normalizeRuleTargets();
+            return rules.map(rule => ({
+                color: rule.color,
+                turn: rule.turn,
+                next_color: rule.nextIndex
+            }));
+        }
         function draw() {
             const width = canvas.clientWidth;
             const height = canvas.clientHeight;
             ctx.clearRect(0, 0, width, height);
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = palette[0] || '#ffffff';
             ctx.fillRect(0, 0, width, height);
-
             const startX = Math.floor(cameraX - width / 2 / tileSize) - 1;
             const endX = Math.ceil(cameraX + width / 2 / tileSize) + 1;
             const startY = Math.floor(cameraY - height / 2 / tileSize) - 1;
             const endY = Math.ceil(cameraY + height / 2 / tileSize) + 1;
             const offsetX = width / 2 - cameraX * tileSize;
             const offsetY = height / 2 - cameraY * tileSize;
-
-            ctx.fillStyle = '#000000';
             for (const [key, color] of cells) {
-                if (color !== 1) continue;
                 const [x, y] = key.split(',').map(Number);
                 if (x < startX || x > endX || y < startY || y > endY) continue;
+                ctx.fillStyle = palette[color] || '#000000';
                 ctx.fillRect(x * tileSize + offsetX, y * tileSize + offsetY, tileSize, tileSize);
             }
-
+            const antX = ant.x * tileSize + offsetX;
+            const antY = ant.y * tileSize + offsetY;
+            if (antX > -tileSize && antX < width && antY > -tileSize && antY < height) {
+                const antSize = tileSize * 0.74;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(antX, antY, tileSize, tileSize);
+                ctx.save();
+                ctx.translate(antX + tileSize / 2, antY + tileSize / 2);
+                ctx.rotate(((ant.facing + 1) % 4) * Math.PI / 2);
+                if (antImage.complete && antImage.naturalWidth > 0) {
+                    ctx.drawImage(antImage, -antSize / 2, -antSize / 2, antSize, antSize);
+                } else {
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(-tileSize * 0.3, -tileSize * 0.3, tileSize * 0.6, tileSize * 0.6);
+                }
+                ctx.restore();
+            }
             if (tileSize >= 8) {
                 ctx.strokeStyle = '#d8d8d8';
                 ctx.lineWidth = 1;
@@ -330,26 +449,42 @@
                 }
                 ctx.stroke();
             }
-
-            const antX = ant.x * tileSize + offsetX;
-            const antY = ant.y * tileSize + offsetY;
-            if (antX > -tileSize && antX < width && antY > -tileSize && antY < height) {
-                ctx.fillStyle = '#d62246';
-                ctx.fillRect(antX + tileSize * 0.2, antY + tileSize * 0.2, tileSize * 0.6, tileSize * 0.6);
-            }
         }
-
         document.getElementById('submitBtn').addEventListener('click', function() {
+            if (simulationStarted) {
+                simulationStarted = false;
+                paused = false;
+                activeSimulationId = null;
+                cells.clear();
+                ant = { x: 0, y: 0, facing: 3 };
+                cameraX = 0;
+                cameraY = 0;
+                this.textContent = 'Start Simulation';
+                document.getElementById('pauseBtn').textContent = 'Pause Simulation';
+                socket.emit('reset');
+                draw();
+                return;
+            }
+            simulationStarted = true;
+            this.textContent = 'Reset Grid';
+            paused = false;
+            document.getElementById('pauseBtn').textContent = 'Pause Simulation';
             activeSimulationId = null;
             cells.clear();
-            ant = { x: 0, y: 0 };
+            ant = { x: 0, y: 0, facing: 3 };
             cameraX = 0;
             cameraY = 0;
             draw();
             socket.emit('start', {
                 tickspeed: tickspeedInput.value,
-                fastest_possible: fastestPossibleInput.checked
+                fastest_possible: fastestPossibleInput.checked,
+                rules: buildRulesPayload()
             })
+        })
+        document.getElementById('pauseBtn').addEventListener('click', function() {
+            paused = !paused;
+            this.textContent = paused ? 'Resume Simulation' : 'Pause Simulation';
+            socket.emit('pause', { pause: paused });
         })
         document.getElementById('centerBtn').addEventListener('click', function() {
             cameraX = ant.x;
@@ -367,6 +502,55 @@
         })
         fastestPossibleInput.addEventListener('change', function() {
             emitSpeedSettings();
+        })
+        document.getElementById('addRuleBtn').addEventListener('click', function() {
+            const nextColor = `#${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')}`;
+            rules.push({
+                color: nextColor,
+                turn: 'right',
+                nextIndex: 0
+            });
+            renderRules();
+        })
+        rulesList.addEventListener('input', function(event) {
+            const row = event.target.closest('.rule-row');
+            if (!row) return;
+            const index = Number(row.dataset.index);
+            if (event.target.classList.contains('rule-color')) {
+                rules[index].color = event.target.value;
+                palette = rules.map(rule => rule.color);
+                draw();
+            }
+        })
+        rulesList.addEventListener('change', function(event) {
+            const row = event.target.closest('.rule-row');
+            if (!row) return;
+            const index = Number(row.dataset.index);
+            if (event.target.classList.contains('rule-color')) {
+                rules[index].color = event.target.value;
+                palette = rules.map(rule => rule.color);
+                renderRules();
+            }
+            if (event.target.classList.contains('rule-turn')) {
+                rules[index].turn = event.target.value;
+            }
+            if (event.target.classList.contains('rule-next')) {
+                rules[index].nextIndex = Number(event.target.value);
+            }
+        })
+        rulesList.addEventListener('click', function(event) {
+            if (!event.target.classList.contains('delete-rule')) return;
+            const row = event.target.closest('.rule-row');
+            const index = Number(row.dataset.index);
+            rules.splice(index, 1);
+            if (rules.length === 0) {
+                rules.push({ color: '#ffffff', turn: 'right', nextIndex: 0 });
+            }
+            rules.forEach(rule => {
+                if (rule.nextIndex > index) rule.nextIndex -= 1;
+            });
+            palette = rules.map(rule => rule.color);
+            renderRules();
         })
         canvas.addEventListener('pointerdown', function(event) {
             isDragging = true;
@@ -402,14 +586,19 @@
         }, { passive: false })
         socket.on('tile_update', function(data) {
             if (activeSimulationId !== null && data.simulation_id !== activeSimulationId) return;
-            cells.set(cellKey(data.x, data.y), data.color);
-            ant = { x: data.ant_x, y: data.ant_y };
+            if (data.color === 0) {
+                cells.delete(cellKey(data.x, data.y));
+            } else {
+                cells.set(cellKey(data.x, data.y), data.color);
+            }
+            ant = { x: data.ant_x, y: data.ant_y, facing: data.ant_facing ?? ant.facing };
             draw();
         })
         socket.on('simulation_started', function(data) {
             activeSimulationId = data.simulation_id;
+            palette = data.colors || rules.map(rule => rule.color);
             cells.clear();
-            ant = { x: 0, y: 0 };
+            ant = { x: 0, y: 0, facing: 3 };
             cameraX = 0;
             cameraY = 0;
             draw();
@@ -417,13 +606,18 @@
         socket.on('tile_updates', function(data) {
             if (activeSimulationId !== data.simulation_id) return;
             for (const update of data.updates) {
-                cells.set(cellKey(update.x, update.y), update.color);
+                if (update.color === 0) {
+                    cells.delete(cellKey(update.x, update.y));
+                } else {
+                    cells.set(cellKey(update.x, update.y), update.color);
+                }
             }
-            ant = { x: data.ant_x, y: data.ant_y };
+            ant = { x: data.ant_x, y: data.ant_y, facing: data.ant_facing ?? ant.facing };
             draw();
         })
         window.addEventListener('resize', resizeCanvas);
         syncFastestPossibleOption();
+        renderRules();
         resizeCanvas();
     </script>
   </body>
