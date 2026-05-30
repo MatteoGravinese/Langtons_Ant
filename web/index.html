@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Langton's Ant</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #ffffff;
+            color: #000000;
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            height: 70px;
+            background: #FFFFFF;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            flex-shrink: 0;
+            border-bottom: 1px solid #000000;
+            border-radius: 0 0 0 12px;
+        }
+        .header-title-group {
+            display: flex;
+            align-items: baseline;
+        }
+        .header-title-group h1 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 24px;
+            color: #000000;
+            letter-spacing: -0.02em;
+        }
+        .header-title-group .author-tag {
+            margin-left: 10px;
+            font-size: 13px;
+            color: #484848;
+            font-weight: 500;
+        }
+        .controls {
+            padding: 24px;
+        }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+        }
+        #sidebar {
+            width: 25%;
+            min-width: 250px;
+            background: #FFFFFF;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 20px;
+            z-index: 1000;
+            flex-shrink: 0;
+            overflow-y: auto;
+            border-left: 1px solid #000000;
+        }
+        .glass-panel {
+            background: #FFFFFF;
+            padding: 20px;
+        }
+        input[type=number] {
+            background: #f5f5f5;
+            border: 1px solid #000000;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 14px;
+            width: 100%;
+            outline: none;
+            margin-bottom: 12px;
+        }
+        input[type=number]:focus {
+            border: 2px solid #000000;
+        }
+        button {
+            background: #000000;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 14px;
+            width: 100%;
+            cursor: pointer;
+            margin-bottom: 12px;
+            margin-top: 12px;
+        }
+        button:hover {
+            background: #333333;
+        }
+        label[for=tickspeed] {
+            font-size: 14px;
+            color: #000000;
+            font-weight: 500;
+            display: block;
+            margin-bottom: 8px;
+        }
+        .slider-label {
+            font-size: 14px;
+            color: #000000;
+            font-weight: 500;
+            display: block;
+            margin-bottom: 8px;
+        }
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #000000;
+            border-radius: 2px;
+            outline: none;
+            margin-bottom: 12px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #000000;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 0 1px #000000;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #000000;
+            margin: 20px 0;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+        }
+        input[type=checkbox] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #000000;
+            border-radius: 4px;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        input[type=checkbox]:checked {
+            background: #000000;
+        }
+        input[type=checkbox]:checked::after {
+            content: '✓';
+            display: block;
+            color: #ffffff;
+            font-size: 14px;
+            text-align: center;
+            line-height: 16px;
+        }
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            min-width: 0;
+        }
+        .canvas-container {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        #grid {
+            display: block;
+        }
+    </style>
+  </head>
+  <body>
+    <header>
+        <div class="header-title-group">
+            <h1>Langton's Ant Simulator</h1>
+            <span class="author-tag">by Matteo Gravinese</span>
+        </div>
+    </header>
+    <div class="main-content">
+        <div class="canvas-container">
+            <canvas id="grid"></canvas>
+        </div>
+        <div id="sidebar">
+            <div id="landing-ui" class="glass-panel" style="display: block;">
+                <h2>Simulation Setup</h2>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
+                    Configure your grid and watch Langton's Ant emerge from simple rules.
+                </p>
+                <div class="glass-panel" style="background: rgba(255, 255, 255, 0.02); margin-bottom: 16px;">
+                    <h3 style="font-size: 13px; color: var(--text-primary); margin-bottom: 8px;">How It Works</h3>
+                    <ul class="instructions-list">
+                        <li>
+                            <span class="step-num">1</span>
+                            <span>Enter your desired grid width and height.</span>
+                        </li>
+                        <li>
+                            <span class="step-num">2</span>
+                            <span>Choose whether the edges wrap around or act as hard walls.</span>
+                        </li>
+                        <li>
+                            <span class="step-num">3</span>
+                            <span>Click <strong>Submit</strong> to start the simulation.</span>
+                        </li>
+                        <li>
+                            <span class="step-num">4</span>
+                            <span>Adjust the tickspeed slider to control simulation speed.</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="controls">
+                    <input type="number" id="x_size" placeholder="Enter grid height">
+                    <input type="number" id="y_size" placeholder="Enter grid width">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="wrap">
+                        Wrap-around edges
+                    </label>
+                    <button id="submitBtn">Submit</button>
+                    <hr>
+                    <label for="tickspeed">Tickspeed: <span id="tickspeed-value">500</span>ms</label>
+                    <input type="range" id="tickspeed" min="0" max="1000" value="500">
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('grid');
+        const ctx = canvas.getContext('2d');
+        let tileSize = 0;
+        document.getElementById('submitBtn').addEventListener('click', function() {
+            const x_size = document.getElementById('x_size').value;
+            const y_size = document.getElementById('y_size').value;
+            const wrap = document.getElementById('wrap').checked;
+            const container = document.querySelector('.canvas-container');
+            tileSize = Math.floor(Math.min(
+                (container.offsetWidth - 48) / x_size,
+                (container.offsetHeight - 48) / y_size
+            ));
+            canvas.width = tileSize * x_size + 1;
+            canvas.height = tileSize * y_size + 1;
+            ctx.translate(0.5, 0.5);
+            for (let x = 0; x < x_size; x++) {
+                for (let y = 0; y < y_size; y++) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                    ctx.strokeStyle = '#000000';
+                    ctx.strokeRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                }
+            }
+            socket.emit('start', {
+                x_size: x_size,
+                y_size: y_size,
+                wrap: wrap,
+                tickspeed: document.getElementById('tickspeed').value
+            })
+        })
+        document.getElementById('tickspeed').addEventListener('input', function() {
+            document.getElementById('tickspeed-value').innerText = this.value;
+            socket.emit('tickspeed', {
+                tickspeed: this.value
+            })
+        })
+        socket.on('tile_update', function(data) {
+            ctx.fillStyle = data.color === 0 ? '#ffffff' : '#000000';
+            ctx.fillRect(data.x * tileSize, data.y * tileSize, tileSize, tileSize);
+            ctx.strokeStyle = '#000000';
+            ctx.strokeRect(data.x * tileSize, data.y * tileSize, tileSize, tileSize);
+        })
+    </script>
+  </body>
+</html>
