@@ -200,4 +200,4 @@ def handle_speed_settings(data):
 
 if __name__ == '__main__':
     print("Server running on http://localhost:5000")
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)

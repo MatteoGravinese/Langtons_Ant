@@ -249,39 +249,39 @@
             <div id="landing-ui" class="glass-panel" style="display: block;">
                 <h2>Simulation Setup</h2>
                 <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
-                    Explore an infinite grid and watch Langton's Ant emerge from simple rules.
+                    Configure the ant's colour rules, then run the simulation and watch complex behaviour emerge from simple logic.
                 </p>
                 <div class="glass-panel" style="background: rgba(255, 255, 255, 0.02); margin-bottom: 16px;">
-                    <h3 style="font-size: 15px; color: var(--text-primary); margin-bottom: 8px;">How It Works:</h3>
+                    <h3 style="font-size: 15px; color: var(--text-primary); margin-bottom: 8px;">How to Use:</h3>
                     <ul class="instructions-list">
                         <li>
-                            <span>Click <strong>Start Infinite Grid</strong> to begin at the origin.</span>
+                            <span>Set your colour rules below, then click <strong>Start Simulation</strong>.</span>
                         </li>
                         <li>
-                            <span>Drag the grid to scroll around the infinite plane.</span>
+                            <span>Click and drag to pan around the infinite grid.</span>
                         </li>
                         <li>
-                            <span>Use the mouse wheel or trackpad to zoom in and out.</span>
+                            <span>Scroll or pinch to zoom in and out.</span>
                         </li>
                         <li>
-                            <span>Adjust the tickspeed slider to control simulation speed.</span>
+                            <span>Use <strong>Step Delay</strong> to control how fast the ant moves.</span>
                         </li>
                     </ul>
                 </div>
                 <div class="controls">
-                    <h3 class="rule-heading">Rules</h3>
+                    <h3 class="rule-heading">Colour Rules</h3>
                     <div id="rulesList"></div>
-                    <button id="addRuleBtn" class="secondary-button">Add Rule</button>
+                    <button id="addRuleBtn" class="secondary-button">Add Colour Rule</button>
                     <hr>
                     <button id="submitBtn">Start Simulation</button>
-                    <button id="centerBtn">Center View</button>
+                    <button id="centerBtn">Center on Ant</button>
                     <hr>
                     <button id="pauseBtn">Pause Simulation</button>
-                    <label for="tickspeed">Tickspeed: <span id="tickspeed-value">500</span>ms</label>
+                    <label for="tickspeed">Step Delay: <span id="tickspeed-value">500</span><span id="tickspeed-unit">ms</span></label>
                     <input type="range" id="tickspeed" min="0" max="1000" value="500">
                     <label class="checkbox-label" id="fastestPossibleOption" style="display: none;">
                         <input type="checkbox" id="fastestPossible">
-                        Fastest possible computation
+                        Run at maximum speed
                     </label>
                 </div>
             </div>
@@ -356,7 +356,9 @@
                     rule.nextIndex = index;
                     return;
                 }
-                if (rule.nextIndex === index || rule.nextIndex >= rules.length) {
+                // Only fix out-of-bounds values. nextIndex === index is now valid
+                // and means "leave the square's colour unchanged".
+                if (rule.nextIndex >= rules.length) {
                     rule.nextIndex = (index + 1) % rules.length;
                 }
             });
@@ -369,9 +371,11 @@
                 row.className = 'rule-row';
                 row.dataset.index = index;
                 const options = rules.map((candidate, candidateIndex) => {
-                    if (rules.length > 1 && candidateIndex === index) return '';
                     const selected = candidateIndex === rule.nextIndex ? 'selected' : '';
-                    return `<option value="${candidateIndex}" ${selected}>${colorName(candidateIndex)}</option>`;
+                    const label = candidateIndex === index
+                        ? `${colorName(candidateIndex)} — unchanged`
+                        : colorName(candidateIndex);
+                    return `<option value="${candidateIndex}" ${selected}>${label}</option>`;
                 }).join('');
                 row.innerHTML = `
                     <label>Square color</label>
@@ -491,13 +495,20 @@
             cameraY = ant.y;
             draw();
         })
+        function updateStepDelayLabel() {
+            const val = Number(tickspeedInput.value);
+            document.getElementById('tickspeed-value').innerText = val === 0 ? 'Instant' : val;
+            document.getElementById('tickspeed-unit').innerText = val === 0 ? '' : 'ms';
+        }
         tickspeedInput.addEventListener('input', function() {
-            document.getElementById('tickspeed-value').innerText = this.value;
+            // Update the label live while dragging. emitSpeedSettings is intentionally
+            // kept in the 'change' handler (fires on release) to avoid flooding the
+            // server with speed updates on every pixel of slider movement.
+            updateStepDelayLabel();
             syncFastestPossibleOption();
         })
         tickspeedInput.addEventListener('change', function() {
-            document.getElementById('tickspeed-value').innerText = this.value;
-            syncFastestPossibleOption();
+            // On release, send the confirmed speed to the server.
             emitSpeedSettings();
         })
         fastestPossibleInput.addEventListener('change', function() {
@@ -616,6 +627,7 @@
             draw();
         })
         window.addEventListener('resize', resizeCanvas);
+        updateStepDelayLabel();
         syncFastestPossibleOption();
         renderRules();
         resizeCanvas();
